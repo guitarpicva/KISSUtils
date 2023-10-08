@@ -33,7 +33,8 @@ public:
     static QByteArray kissWrapCommand(QByteArray val, int cmdCode);
     static QByteArray kissUnwrap(QByteArray in);
     static QByteArray buildUIFrame(
-        QString dest_call, QString source_call, QString digi1 = QString(), QString digi2 = QString(), QByteArray data = QByteArray());
+        QString dest_call, QString source_call, QString digi1 = QString(), QString digi2 = QString(), QString text = QString());
+    static QByteArrayList UIKISSUtils::unwrapUIFrame(const QByteArray kiss_in): // raw data from KISS so first byte is KISS type code
 signals:
 };
 

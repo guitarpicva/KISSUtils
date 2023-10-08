@@ -240,7 +240,7 @@ QByteArray UIKISSUtils::kissUnwrap(QByteArray in)
     return out;
 }
 
-QByteArray UIKISSUtils::buildUIFrame(QString dest_call, QString source_call, QString digi1, QString digi2, QByteArray data)
+QByteArray UIKISSUtils::buildUIFrame(QString dest_call, QString source_call, QString digi1, QString digi2, QString text)
 {
     /* ax.25 UI frame has 7 chars for dest, 7 chars for source, 7 chars for
     * digi, (7 chars for a second digi) one byte for frame type of UI (03), and one byte for PID (f0)
@@ -429,10 +429,124 @@ QByteArray UIKISSUtils::buildUIFrame(QString dest_call, QString source_call, QSt
     // PID = 0x03, no layer 3
     out.append((uchar) 0x03);
     out.append((uchar) 0xf0);
-    msg = data.mid(0, 256); // limit to 256 bytes
+    msg = text.toLatin1().mid(0, 256); // limit to 256 bytes
     for (int i = 0; i < msg.length(); i++) {
         out.append((uchar) msg[i]);
     }
     //qDebug() << "OUT:" << out;
+    return out;
+}
+
+QByteArrayList UIKISSUtils::unwrapUIFrame(QByteArray kiss_in)
+{
+    qDebug()<<"in:"<<kiss_in;
+    // Erase the KISS mode byte if necessary
+    QByteArray in;
+    if(kiss_in[0] == 0x00) {
+        in = kiss_in.mid(1);
+    }
+    else {
+        in = kiss_in;
+    }
+    //                                     opt   opt
+    //                    dest,src,digi1,digi2,payload
+    QByteArrayList out = {"", "", "", "", ""};
+    out.reserve(5);
+    // extract the call signs and the payload and assign them as
+    // [0]=dest, [1]=source, [2]=digi1, [3]=digi2, [4]=payload
+    char b;
+    int i = 0, end = 6;
+    // DEST
+    while (i < end) {
+        b = (in[i] >> 1) & 0x7F;
+        //printf("[%02d] %c\n", i, (int) b);
+        out[0].append(b);
+        i++;
+    }
+    b = (in[i] >> 1) & 0x0F;
+    out[0].append('-');
+    out[0].append(QString::number(b).toLatin1());
+    //printf("[%02d] %d\n", i, b);
+
+    // SOURCE
+    i++;
+    end = i + 6;
+    while (i < end) {
+        b = (in[i] >> 1) & 0x7F;
+        out[1].append(b);
+        //printf("[%02d] %c\n", i, (int) b);
+        i++;
+    }
+    int c = in[i] & 0x01; // if there is a continuation bit
+    b = (in[i] >> 1) & 0x0F;
+    out[1].append('-');
+    out[1].append(QString::number(b).toLatin1());
+        //printf("[%02d] %d\n", i, b);
+    if(c == 0x00) { // there is at least one Digi to follow
+        // DIGI1
+        i++;
+        end = i + 6;
+        while (i < end) {
+            b = in[i] >> 1;
+            out[2].append(b);
+            //printf("[%02d] %c\n", i, (int) b);
+            i++;
+        }
+        bool h = false; // the has been repeated bit for repeaters only
+        c = in[i] & 0x01;
+        //h = in[i] & 0x80; // bit 7 0 = not repeated, 1 = this station repeated it
+        h = in[i] > (char)127;
+        b = (in[i] >> 1) & 0x0F;
+        out[2].append('-');
+        out[2].append(QString::number(b).toLatin1());
+        //if(h > 127) out[2].append(1,'*');
+        if(h) out[2].append('*');
+        //printf("[%02d] %d\n", i, b);
+        if(c == 0x00) { // there is a second digi to follow
+            // DIGI2
+            i++;
+            end = i + 6;
+            while (i < end) {
+                b = in[i] >> 1;
+                out[3].append(b);
+                //printf("[%02d] %c\n", i, (int) b);
+                i++;
+            }
+            //c = in[i] & 0x01;  // not needed for the last digi
+            h = in[i] > (char)127;
+            b = (in[i] >> 1) & 0x0F;
+            out[3].append('-');
+            out[3].append(QString::number(b).toLatin1());
+            if(h) out[3].append('*');
+            //printf("[%02d] %d\n", i, b);
+//            if(c == 0x00) { // one more detail "digi"?
+//                i++;
+//                end = i + 6;
+//                while (i < end) {
+//                    b = in[i] >> 1;
+//                    out[4].append(b);
+//                    //printf("[%02d] %c\n", i, (int) b);
+//                    i++;
+//                }
+//                c = in[i] & 0x01;
+//                h = in[i] > (char)127;
+//                b = (in[i] >> 1) & 0x0F;
+//                out[4].append('-');
+//                out[4].append(QString::number(b).toLatin1());
+//                if(h) out[4].append('*');
+//            }
+        }
+    }
+
+    i+=3; // skip past the previously read SSID byte and the 0x03 0xF0 Control and PID bytes
+    end = in.length();
+    // The payload is all the rest
+    while(i < end) {
+        out[4].append(in[i]);
+        i++;
+    }
+
+    //printf("%s>%s,%s,%s,%s\n%s\n", out[1].c_str(), out[0].c_str(), out[2].c_str(), out[3].c_str(), out[4].c_str(), out[5].c_str());
+
     return out;
 }
